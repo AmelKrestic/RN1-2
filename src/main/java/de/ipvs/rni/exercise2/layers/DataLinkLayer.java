@@ -62,7 +62,7 @@ public class DataLinkLayer implements ProcessEvents {
 	public void process() {
 		curTime++;
 		// TODO
-		// Recieve
+		// Recieve all Frames
 		ArrayDeque<Frame> toBeProcessed = new ArrayDeque<>();
 		while (!fromLower.isEmpty()) {
 			Frame f = fromLower.poll();
@@ -82,7 +82,7 @@ public class DataLinkLayer implements ProcessEvents {
 			}
 
 		}
-		// Process messages (in case of misorder)
+		// Process recieved non ack Frames (in case of misorder)
 		int trackChange=toBeProcessed.size();
 		boolean sendAck = false;
 		while (trackChange>0) {
@@ -109,7 +109,7 @@ public class DataLinkLayer implements ProcessEvents {
 			toLower.add(ack);
 		}
 
-		// Re-send
+		// Re-send unacknowledged
 		if (!inFlight.isEmpty()) {
 			if ((curTime - retransmissionTimeouts.peek()) > RETRANSMISSION_TIMEOUT) {
 				toLower.addAll(inFlight);
@@ -120,7 +120,7 @@ public class DataLinkLayer implements ProcessEvents {
 			}
 		}
 
-		// Send
+		// Send new frames
 		while (!fromUpper.isEmpty() && availWindow > 0) {
 			Frame f = createNextFrame(fromUpper);
 			toLower.add(f);
