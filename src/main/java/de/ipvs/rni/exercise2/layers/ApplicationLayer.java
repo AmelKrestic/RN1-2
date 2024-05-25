@@ -65,7 +65,9 @@ public class ApplicationLayer implements ProcessEvents {
 	 */
 	public Object transformMessageForReceiving(ArrayDeque<Byte> byteInput) {
 		byteInput.removeLast();
-		return Utils.bytesToObj(byteInput);
+		Object o=Utils.bytesToObj(byteInput);
+		byteInput.clear();
+		return o;
 
 	}
 
