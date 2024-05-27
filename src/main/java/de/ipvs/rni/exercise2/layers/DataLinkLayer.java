@@ -40,7 +40,7 @@ public class DataLinkLayer implements ProcessEvents {
 
 	/**
 	 * Converts Byte Queue to byte array and constructs Frame from it.
-	 * 
+	 * Removes only bytes from queue up to maximum limit - Frame overhead
 	 * @param bytesToSent
 	 * @return
 	 */
@@ -57,13 +57,55 @@ public class DataLinkLayer implements ProcessEvents {
 		Frame f = new Frame(seqNo++, bytes, bytes.length);
 		return f;
 	}
-
+	
+	/**
+	 * Converts byteque into frames to send to physical layer.
+	 * Converts frames from physical layer into byteques for application layer.
+	 * Tracks acknowledgements of frames and resends after timeout.
+	 */
 	@Override
 	public void process() {
 		curTime++;
 		// TODO
-		// Recieve all Frames
-		ArrayDeque<Frame> toBeProcessed = new ArrayDeque<>();
+		ArrayDeque<Frame> toBeProcessed =recieveFrames();
+		boolean sendAck = processFrames(toBeProcessed);
+		// Send ack in case of new frames (or resend ack for old frames)
+		if(sendAck) {
+			Frame ack = new Frame(nextSeqNo-1);
+			toLower.add(ack);
+		}
+
+		// Re-send unacknowledged. Since first Element is oldest, only it needs to be checked for timeout
+		// In case of timeout, all in flight frames are resent (go back n).
+		if (!inFlight.isEmpty()) {
+			if ((curTime - retransmissionTimeouts.peek()) > RETRANSMISSION_TIMEOUT) {
+				toLower.addAll(inFlight);
+				retransmissionTimeouts.clear();
+				for (Frame f : inFlight) {
+					retransmissionTimeouts.add(curTime);
+				}
+			}
+		}
+
+		// Send new frames and add elements to inFlight/retransmission queue
+		while (!fromUpper.isEmpty() && availWindow > 0) {
+			Frame f = createNextFrame(fromUpper);
+			toLower.add(f);
+			inFlight.add(f);
+			retransmissionTimeouts.add(curTime);
+			availWindow--;
+		}
+	}
+
+	/**
+	 * empties Frame queue from physical layer.
+	 * Checks for integrity of frame and checks for acknowledgements.
+	 * For acknowledgements, increments nextAck up to highest recieved acknowledgement, removing elements from inFlight and retransmision Queue in the process (inclusive acknowledgements).
+	 * Non Ack Frames added to queue which is returned by this method.
+	 * @return Returns all non ack frames with integrity
+	 */
+	private ArrayDeque<Frame> recieveFrames() {
+		ArrayDeque<Frame> toBeProcessed=new ArrayDeque<>();
 		while (!fromLower.isEmpty()) {
 			Frame f = fromLower.poll();
 			if (f.checkIntegrity()) {
@@ -82,7 +124,19 @@ public class DataLinkLayer implements ProcessEvents {
 			}
 
 		}
-		// Process recieved non ack Frames (in case of misorder)
+		return toBeProcessed;
+	}
+
+	/**
+	 * iterates over given Frames, checking if next expected sequence number is contained.
+	 * next sequence number increased with each accepted Frame.
+	 * Reiterates as long as proper sequence number has been found.
+	 * Done so as not to drop frames that arrived in the incorrect order.
+	 * Checking for integrity should happen before.
+	 * @param toBeProcessed Queue of Frames to be processed.
+	 * @return true if acknowledgement is needed (past sequence number recieved or new expected sequence number)
+	 */
+	private boolean processFrames(ArrayDeque<Frame> toBeProcessed) {
 		int trackChange=toBeProcessed.size();
 		boolean sendAck = false;
 		while (trackChange>0) {
@@ -103,31 +157,7 @@ public class DataLinkLayer implements ProcessEvents {
 				trackChange--;
 			}
 		}
-		// Send ack in case of new messages (or old messages a resend)
-		if(sendAck) {
-			Frame ack = new Frame(nextSeqNo-1);
-			toLower.add(ack);
-		}
-
-		// Re-send unacknowledged
-		if (!inFlight.isEmpty()) {
-			if ((curTime - retransmissionTimeouts.peek()) > RETRANSMISSION_TIMEOUT) {
-				toLower.addAll(inFlight);
-				retransmissionTimeouts.clear();
-				for (Frame f : inFlight) {
-					retransmissionTimeouts.add(curTime);
-				}
-			}
-		}
-
-		// Send new frames
-		while (!fromUpper.isEmpty() && availWindow > 0) {
-			Frame f = createNextFrame(fromUpper);
-			toLower.add(f);
-			inFlight.add(f);
-			retransmissionTimeouts.add(curTime);
-			availWindow--;
-		}
+		return sendAck;
 	}
 
 	//////////////////////////////////////////////////

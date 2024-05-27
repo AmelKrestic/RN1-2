@@ -58,7 +58,7 @@ public class ApplicationLayer implements ProcessEvents {
 
 	/**
 	 * Transforms the input bytes back into an object to be handed over to the next
-	 * layer. Removal of END flag.
+	 * layer. Removes end flag and clears input queue.
 	 * 
 	 * @param byteInput
 	 * @return the object reconstructed
@@ -86,6 +86,7 @@ public class ApplicationLayer implements ProcessEvents {
 	 * application queue to byte queues and adds them to toLower. Second loop reads
 	 * out byte queue from lower layer and separates them into objects with END
 	 * character.
+	 * If no End character is found, saves the currently read bytes to messagebuffer to complete later.
 	 */
 	@Override
 	public void process() {
